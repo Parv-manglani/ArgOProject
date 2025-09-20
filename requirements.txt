@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-dotenv==1.0.1
+aiosqlite==0.20.0
+netCDF4==1.7.1.post2
+numpy==2.1.1
+pydantic==2.9.2
+  # or any recent 1.x (e.g., 1.51.2)
+httpx==0.27.2     # used by the SDK under the hood

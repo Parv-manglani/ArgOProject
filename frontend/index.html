@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>FloatChat AI — ARGO Ocean Data Explorer</title>
+
+  <!-- Preconnects -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+
+  <!-- Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Theming -->
+  <meta name="theme-color" content="#0B1426" />
+  <meta name="color-scheme" content="dark light" />
+</head>
+<body>
+  <!-- Navigation Header -->
+  <nav class="navbar" role="navigation" aria-label="Primary">
+    <div class="nav-container">
+      <div class="nav-brand" aria-label="Brand">
+        <i class="fas fa-water nav-icon" aria-hidden="true"></i>
+        <span class="brand-text">FloatChat AI</span>
+        <span class="beta-badge" aria-label="Beta badge">Beta</span>
+      </div>
+      <div class="nav-items" role="group" aria-label="Top actions">
+        <button class="nav-btn" id="dataBtn" type="button" aria-pressed="false">
+          <i class="fas fa-database" aria-hidden="true"></i>
+          <span>Data Explorer</span>
+        </button>
+        <button class="nav-btn" id="aboutBtn" type="button">
+          <i class="fas fa-info-circle" aria-hidden="true"></i>
+          <span>About</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <div class="main-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" aria-label="Controls">
+      <div class="sidebar-header">
+        <h3><i class="fas fa-cog" aria-hidden="true"></i> Controls</h3>
+      </div>
+
+      <!-- Chat Sessions -->
+      <section class="sidebar-section" aria-labelledby="sessions-title">
+        <h4 id="sessions-title">
+          <i class="fas fa-comments" aria-hidden="true"></i> Chat Sessions
+        </h4>
+        <button class="btn btn-primary" id="newChatBtn" type="button">
+          <i class="fas fa-plus" aria-hidden="true"></i> New Chat
+        </button>
+        <div class="session-list" id="sessionList" role="list"></div>
+      </section>
+
+      <!-- File Upload -->
+      <section class="sidebar-section" aria-labelledby="upload-title">
+        <h4 id="upload-title">
+          <i class="fas fa-upload" aria-hidden="true"></i> Upload NetCDF
+        </h4>
+
+        <div
+          class="upload-area"
+          id="uploadArea"
+          role="button"
+          tabindex="0"
+          aria-label="Upload NetCDF files. Click or drag & drop."
+        >
+          <i class="fas fa-cloud-upload-alt upload-icon" aria-hidden="true"></i>
+          <p>Drag &amp; drop NetCDF files here</p>
+          <p class="upload-hint">or click to browse</p>
+          <input type="file" id="fileInput" accept=".nc,.netcdf,.cdf" hidden aria-hidden="true" />
+        </div>
+
+        <div class="file-list" id="fileList" role="list"></div>
+      </section>
+
+      <!-- System Status -->
+      <section class="sidebar-section" aria-labelledby="status-title">
+        <h4 id="status-title">
+          <i class="fas fa-heartbeat" aria-hidden="true"></i> System Status
+        </h4>
+        <div class="status-indicator" id="systemStatus" role="status" aria-live="polite">
+          <div class="status-item">
+            <span class="status-dot connecting" aria-hidden="true"></span>
+            <span>Checking...</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-area" aria-label="Main content">
+      <!-- Chat Interface -->
+      <section class="chat-container" id="chatContainer" aria-labelledby="chat-title">
+        <div class="chat-header">
+          <h2 id="chat-title">
+            <i class="fas fa-robot" aria-hidden="true"></i> ARGO Ocean Data Assistant
+          </h2>
+          <div class="chat-actions" role="group" aria-label="Chat actions">
+            <button class="btn btn-secondary" id="clearChatBtn" type="button">
+              <i class="fas fa-trash" aria-hidden="true"></i> Clear
+            </button>
+            <button class="btn btn-secondary" id="exportChatBtn" type="button">
+              <i class="fas fa-download" aria-hidden="true"></i> Export
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages" aria-live="polite">
+          <!-- Welcome Message -->
+          <div class="message assistant" role="article">
+            <div class="message-avatar" aria-hidden="true">
+              <i class="fas fa-robot"></i>
+            </div>
+            <div class="message-content">
+              <div class="message-text">
+                <h3>Welcome to FloatChat AI! 🌊</h3>
+                <p>I’m your AI assistant for exploring ARGO ocean data. Here’s what I can help with:</p>
+                <ul>
+                  <li><strong>Data Queries:</strong> ask about temperature, salinity, and ocean conditions</li>
+                  <li><strong>Location-based Analysis:</strong> “Show me data from Bay of Bengal”</li>
+                  <li><strong>Time-series Exploration:</strong> “Temperature trends in last 60 days”</li>
+                  <li><strong>NetCDF Processing:</strong> upload and analyze your ocean data files</li>
+                </ul>
+                <p>Try asking: <em>“What’s the average temperature in the Arabian Sea at 200 m depth?”</em></p>
+              </div>
+              <div class="message-time">Just now</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-container">
+          <div class="chat-input-wrapper">
+            <label for="chatInput" class="visually-hidden">Type your message</label>
+            <textarea
+              id="chatInput"
+              placeholder="Ask about ARGO ocean data… (e.g., 'Bay of Bengal temperature at 500 m depth')"
+              rows="1"
+              aria-label="Chat input"
+            ></textarea>
+            <div class="input-actions">
+              <button class="btn btn-icon" id="attachBtn" type="button" title="Attach file" aria-label="Attach file">
+                <i class="fas fa-paperclip" aria-hidden="true"></i>
+              </button>
+              <button class="btn btn-primary" id="sendBtn" type="button" aria-label="Send message">
+                <i class="fas fa-paper-plane" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <div class="input-hints">
+            <div class="typing-indicator" id="typingIndicator" style="display: none;" aria-live="polite">
+              <span></span><span></span><span></span>
+              <span class="sr-only">AI is typing…</span>
+              AI is thinking...
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Data Visualization Panel -->
+      <section class="viz-panel" id="vizPanel" style="display: none;" aria-labelledby="viz-title">
+        <div class="viz-header">
+          <h3 id="viz-title">
+            <i class="fas fa-chart-area" aria-hidden="true"></i> Data Visualization
+          </h3>
+          <button class="btn btn-secondary" id="closevizBtn" type="button" aria-label="Close visualization panel">
+            <i class="fas fa-times" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="viz-content">
+          <div class="viz-controls">
+            <label for="vizType" class="visually-hidden">Visualization Type</label>
+            <select id="vizType" class="form-select" aria-label="Visualization type">
+              <option value="map">Geographic Map</option>
+              <option value="depth">Depth Profile</option>
+              <option value="timeseries">Time Series</option>
+              <option value="scatter">T–S Diagram</option>
+            </select>
+            <button class="btn btn-primary" id="generateVizBtn" type="button">
+              Generate Visualization
+            </button>
+          </div>
+          <div class="viz-display" id="vizDisplay" role="region" aria-label="Visualization display">
+            <div class="viz-placeholder">
+              <i class="fas fa-chart-bar" aria-hidden="true"></i>
+              <p>Upload NetCDF data and select a visualization type to get started</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- About Modal -->
+  <div class="modal" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="about-title" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="about-title"><i class="fas fa-info-circle" aria-hidden="true"></i> About FloatChat AI</h3>
+        <button class="modal-close" id="closeAboutModal" type="button" aria-label="Close about dialog">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="about-content">
+          <div class="about-section">
+            <h4>🌊 Project Overview</h4>
+            <p>FloatChat AI is an intelligent conversational interface for exploring ARGO ocean data. Built for SIH 2025, it democratizes access to oceanographic data through natural language queries.</p>
+          </div>
+          <div class="about-section">
+            <h4>🤖 AI Capabilities</h4>
+            <ul>
+              <li>Natural language processing for ocean data queries</li>
+              <li>NetCDF file processing and analysis</li>
+              <li>Interactive data visualization</li>
+              <li>Multi-language support (English, Hindi, Hinglish)</li>
+            </ul>
+          </div>
+          <div class="about-section">
+            <h4>📊 Data Sources</h4>
+            <ul>
+              <li>ARGO Global Data Repository</li>
+              <li>Indian Ocean ARGO floats</li>
+              <li>Real-time oceanographic measurements</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Details Modal -->
+  <div class="modal" id="fileModal" role="dialog" aria-modal="true" aria-labelledby="file-title" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="file-title"><i class="fas fa-file-alt" aria-hidden="true"></i> File Details</h3>
+        <button class="modal-close" id="closeFileModal" type="button" aria-label="Close file details dialog">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="fileModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay" aria-hidden="true">
+    <div class="loading-spinner" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="loadingText">Processing...</p>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="toast-content">
+      <i class="toast-icon" aria-hidden="true"></i>
+      <span class="toast-message"></span>
+    </div>
+  </div>
+
+  <!-- Accessibility helpers -->
+  <style>
+    .visually-hidden, .sr-only {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+  </style>
+
+  <!-- Scripts: load libraries once, then app code -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" defer></script>
+  <!-- NetCDF.js is optional for client-side previews; keep single include -->
+  <script src="https://cdn.jsdelivr.net/npm/netcdfjs@0.7.1/dist/netcdfjs.min.js" defer></script>
+  <script src="script.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+# --- Python / FastAPI ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+env/
+pip-wheel-metadata/
+.eggs/
+*.egg-info/
+dist/
+build/
+*.log
+
+# pytest / coverage / mypy
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.pytype/
+.dmypy.json
+.cache/
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- SQLite / local DB files ---
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*-journal
+*-wal
+*-shm
+backend/floatchat.db
+
+# --- Temp files / uploads / artifacts ---
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# NetCDF & sample data (keep out of repo)
+*.nc
+*.netcdf
+*.cdf
+data/
+uploads/
+
+# --- Frontend static outputs (if any future bundling) ---
+node_modules/
+*.map
+.cache/
+*.tar.gz
+*.zip
+
+# --- Editors / IDEs ---
+.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.iml
+
+# --- Uvicorn/Run artifacts ---
+uvicorn*.log
+
+# --- OS / misc ---
+Icon?
+._*
