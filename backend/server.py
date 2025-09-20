@@ -361,10 +361,62 @@ async def ingest_argo_to_db(file_id: str, nc_path: str):
                 await db.commit()
 
 
+# import re
+# import aiosqlite
+# from typing import Optional
+
+# Variable synonyms → DB columns
+VAR_MAP = {
+    "temperature": ["temp", "temperature"],
+    "salinity": ["sal", "salinity", "psal"],
+    "pressure": ["pressure", "pres"],
+    "oxygen": ["oxygen", "o2", "doxy"],
+    "depth": ["depth"],
+    "latitude": ["lat", "latitude"],
+    "longitude": ["lon", "longitude"],
+}
+
+# Supported stats
+STAT_FUNCS = {
+    "avg": "AVG",
+    "average": "AVG",
+    "mean": "AVG",
+    "min": "MIN",
+    "minimum": "MIN",
+    "max": "MAX",
+    "maximum": "MAX",
+    "count": "COUNT",
+    "std": "STDDEV",  # SQLite needs extension for STDDEV
+}
+
+def _detect_variable(user_text: str) -> Optional[str]:
+    for col, aliases in VAR_MAP.items():
+        for alias in aliases:
+            if re.search(rf"\b{alias}\b", user_text):
+                print(f"[DEBUG] Matched variable alias '{alias}' → column '{col}'")
+                return col
+    print("[DEBUG] No variable match found.")
+    return None
+
+def _detect_stat(user_text: str) -> Optional[str]:
+    for word, sqlfunc in STAT_FUNCS.items():
+        if re.search(rf"\b{word}\b", user_text):
+            print(f"[DEBUG] Matched stat word '{word}' → SQL '{sqlfunc}'")
+            return sqlfunc
+    print("[DEBUG] No stat match found.")
+    return None
+
 async def try_answer_from_data(user_text: str) -> Optional[str]:
     t = user_text.lower().strip()
+    print("\n==============================")
+    print("try_answer_from_data received:", t)
+    print("==============================")
 
-    if "latest position" in t or ("latest" in t and "position" in t):
+    # -------------------
+    # Special: Latest position
+    # -------------------
+    if "latest position" in t:
+        print("[DEBUG] Detected 'latest position' query")
         async with aiosqlite.connect(DATABASE_PATH) as db:
             await db.execute("PRAGMA foreign_keys = ON;")
             row = await (await db.execute(
@@ -372,42 +424,101 @@ async def try_answer_from_data(user_text: str) -> Optional[str]:
                 "WHERE latitude IS NOT NULL AND longitude IS NOT NULL "
                 "ORDER BY timestamp DESC NULLS LAST LIMIT 1"
             )).fetchone()
+            print("[DEBUG] SQL executed for latest position, row:", row)
             if row:
                 lat, lon = row
                 return f"Latest known position: lat={lat:.4f}, lon={lon:.4f}."
-            return "I couldn't find any positions in the ingested data."
+            return "No positions found in the data."
 
-    m = re.search(r"(avg|average|mean)\s+temp(?:erature)?\s+(?:at|@)\s*(\d+)\s*m", t)
+    # -------------------
+    # Handle direct latitude/longitude queries (no stat)
+    # -------------------
+    if "latitude" in t or "longitude" in t:
+        print("[DEBUG] Detected latitude/longitude query without stat")
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            await db.execute("PRAGMA foreign_keys = ON;")
+            rows = await (await db.execute(
+                "SELECT latitude, longitude FROM argo_data "
+                "WHERE latitude IS NOT NULL AND longitude IS NOT NULL "
+                "LIMIT 5"
+            )).fetchall()
+            print("[DEBUG] SQL executed for lat/lon sample, rows:", rows)
+            if not rows:
+                return "No latitude/longitude data found."
+            
+            formatted = [f"({r[0]:.4f}, {r[1]:.4f})" for r in rows]
+            return "Here are some latitude/longitude pairs: " + ", ".join(formatted)
+
+    # -------------------
+    # Detect variable/stat
+    # -------------------
+    var = _detect_variable(t)
+    stat = _detect_stat(t)
+
+    # If not recognized → give suggestions
+    if not var or not stat:
+        print(f"[DEBUG] Either variable ({var}) or stat ({stat}) not detected.")
+        valid_vars = ", ".join(VAR_MAP.keys())
+        valid_stats = ", ".join(set(STAT_FUNCS.keys()))
+        return (
+            "I couldn’t understand your query.\n\n"
+            "👉 Try asking in formats like:\n"
+            f"- average temperature at 100m\n"
+            f"- mean salinity between 50 and 200m\n"
+            f"- max oxygen at 20m\n"
+            f"- count pressure values between 0 and 1000m\n\n"
+            f"Supported variables: {valid_vars}\n"
+            f"Supported stats: {valid_stats}"
+        )
+
+    # -------------------
+    # Depth filters
+    # -------------------
+    depth_filter = ""
+    params = []
+
+    # "at 100m"
+    m = re.search(r"(?:at|@)\s*(\d+)\s*m", t)
     if m:
-        depth = float(m.group(2))
+        depth = float(m.group(1))
         tol = max(2.0, depth * 0.05)
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
-            row = await (await db.execute(
-                "SELECT AVG(temperature) FROM argo_data "
-                "WHERE temperature IS NOT NULL AND depth BETWEEN ? AND ?",
-                (depth - tol, depth + tol),
-            )).fetchone()
-            if row and row[0] is not None:
-                return f"Average temperature near {depth} m is {row[0]:.3f} °C (±{tol:.1f} m window)."
-            return f"I couldn't find temperature points around {depth} m."
+        depth_filter = "AND depth BETWEEN ? AND ?"
+        params.extend([depth - tol, depth + tol])
+        print(f"[DEBUG] Depth filter detected: {depth}m ±{tol:.1f}m")
 
-    m2 = re.search(r"(avg|average|mean)\s+salinity\s+(?:between|from)\s*(\d+)\s*(?:to|and|-)\s*(\d+)\s*m", t)
+    # "between 50 and 200m"
+    m2 = re.search(r"(?:between|from)\s*(\d+)\s*(?:to|and|-)\s*(\d+)\s*m", t)
     if m2:
-        d1, d2 = float(m2.group(2)), float(m2.group(3))
+        d1, d2 = float(m2.group(1)), float(m2.group(2))
         lo, hi = min(d1, d2), max(d1, d2)
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
-            row = await (await db.execute(
-                "SELECT AVG(salinity) FROM argo_data "
-                "WHERE salinity IS NOT NULL AND depth BETWEEN ? AND ?",
-                (lo, hi),
-            )).fetchone()
-            if row and row[0] is not None:
-                return f"Average salinity between {lo}–{hi} m is {row[0]:.4f} PSU."
-            return f"I couldn't find salinity points between {lo}–{hi} m."
+        depth_filter = "AND depth BETWEEN ? AND ?"
+        params = [lo, hi]  # overwrite if both filters exist
+        print(f"[DEBUG] Depth range detected: {lo}–{hi} m")
 
-    return None
+    # -------------------
+    # Build SQL
+    # -------------------
+    sql = f"SELECT {stat}({var}) FROM argo_data WHERE {var} IS NOT NULL {depth_filter}"
+    print("[DEBUG] Final SQL:", sql)
+    print("[DEBUG] Params:", params)
+
+    # -------------------
+    # Run SQL
+    # -------------------
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("PRAGMA foreign_keys = ON;")
+        row = await (await db.execute(sql, params)).fetchone()
+        print("[DEBUG] SQL executed, row:", row)
+
+    if row and row[0] is not None:
+        val = row[0]
+        print(f"[DEBUG] Got result: {val}")
+        if stat == "COUNT":
+            return f"There are {int(val)} {var} records {('at the requested depth range' if depth_filter else '')}."
+        return f"{stat.capitalize()} {var} {('at the requested depth range' if depth_filter else '')}: {val:.3f}"
+    else:
+        print(f"[DEBUG] No matching data found for {var}.")
+        return f"I couldn't find {var} data matching your query."
 
 
 # =============================================================================
@@ -418,17 +529,18 @@ async def chat_endpoint(request: ChatRequest):
     try:
         session_id = request.session_id or str(uuid.uuid4())
 
+        # -----------------------
+        # Step 1: Run your direct logic
+        # -----------------------
         direct = await try_answer_from_data(request.message)
-        if direct:
-            msg_id = await save_chat_message(session_id, "assistant", direct, provider="db")
-            return ChatResponse(
-                response=direct,
-                session_id=session_id,
-                message_id=msg_id,
-                status="success",
-                provider="db",
-            )
+        print("direct:", direct)
 
+        # Save user message
+        await save_chat_message(session_id, "user", request.message)
+
+        # -----------------------
+        # Step 2: Build system + history
+        # -----------------------
         history = await get_chat_history(session_id, limit=10)
 
         files_md = await get_all_netcdf_metadata()
@@ -443,29 +555,57 @@ async def chat_endpoint(request: ChatRequest):
                 "content": "User has uploaded NetCDF files:\n" + "\n".join(lines)
             })
 
-        await save_chat_message(session_id, "user", request.message)
-
         deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
         if not deployment:
             raise RuntimeError("AZURE_OPENAI_DEPLOYMENT is missing.")
         client = _azure_client()
 
         system_message = (
-            "You are FloatChat, an expert AI assistant for ARGO ocean data analysis. "
-            "When the user asks about their uploaded data, use the file summaries provided "
-            "in system/context messages. If a question requires statistics (e.g., averages "
-            "over depths), but you do not have precomputed values, explain what you need "
-            "or suggest the user to upload a file that contains those variables."
-        )
+             "You are FloatChat, an expert AI assistant for ARGO ocean data analysis.\n\n"
+                "You have two sources of truth:\n"
+                "1. Direct SQL results provided by the backend (labeled as 'Direct data query result').\n"
+                "2. Your own reasoning about NetCDF metadata and user intent.\n\n"
+                "Rules:\n"
+                "- If a direct result is provided, always incorporate it naturally in your answer.\n"
+                "- If no direct result is available because the query lacked a statistic (avg, min, max, count, std), "
+                "do not just say you cannot answer. Instead, guide the user with **clear example queries** "
+                "that they can run, based on the variable and context they asked about.\n"
+                "- Example:\n"
+                "  User: 'oxygen level'\n"
+                "  Response: 'I need to know whether you want the **average**, **minimum**, or **maximum** oxygen level. "
+                "You can ask: \"average oxygen at 100m\", \"max oxygen between 50 and 200m\", or \"count oxygen values.\"'\n"
+                "- Example:\n"
+                "  User: 'oxygen at 100m'\n"
+                "  Response: 'Do you want the **average oxygen at 100m across all profiles**, "
+                "or the **oxygen at 100m for a specific profile (e.g., D2900766_001.nc)?' Suggest both options clearly.\n\n"
+                "Always keep your answers practical and user-friendly, and when possible, propose the exact follow-up "
+                "queries the user should try, using the supported variables and statistics.\n\n"
+                "Supported variables: temperature, salinity, pressure, oxygen, depth, latitude, longitude.\n"
+                "Supported stats: avg/average/mean, min/minimum, max/maximum, count, std.\n"
+            )
 
+        # -----------------------
+        # Step 3: Build AI messages
+        # -----------------------
         messages = [{"role": "system", "content": system_message}]
         for m in history[-10:]:
             r = m.get("role") or "user"
             if r not in ("user", "assistant", "system"):
                 r = "user"
             messages.append({"role": r, "content": m.get("content", "")})
+
+        # Inject direct results into the context
+        if direct:
+            messages.append({
+                "role": "system",
+                "content": f"Direct data query result:\n{direct}"
+            })
+
         messages.append({"role": "user", "content": request.message})
 
+        # -----------------------
+        # Step 4: Ask AI
+        # -----------------------
         resp = await client.chat.completions.create(
             model=deployment,
             messages=messages,
@@ -473,9 +613,14 @@ async def chat_endpoint(request: ChatRequest):
             top_p=1.0,
             max_tokens=800,
         )
-        text = (resp.choices[0].message.content or "").strip()
 
+        text = (resp.choices[0].message.content or "").strip()
+        print("AI response:", text)
+
+        # Save AI message
         msg_id = await save_chat_message(session_id, "assistant", text, provider=f"azure-cs:{deployment}")
+        print("Saved message ID:", msg_id)
+
         return ChatResponse(
             response=text,
             session_id=session_id,
